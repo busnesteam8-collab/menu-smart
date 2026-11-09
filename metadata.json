@@ -1,0 +1,6 @@
+{
+  "name": "Menu Smart - منصة إدارة منيوهات المطاعم الذكية",
+  "description": "منصة SaaS سحابية متكاملة متعددة المستأجرين (Multi-Tenant) لإدارة المنيو الإلكتروني والطلبات عبر الواتساب ورموز QR للمطاعم والكافيهات.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

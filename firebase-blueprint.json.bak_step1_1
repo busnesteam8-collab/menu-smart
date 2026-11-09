@@ -1,0 +1,235 @@
+{
+  "entities": {
+    "Restaurant": {
+      "title": "Restaurant",
+      "description": "Multi-tenant restaurant or cafe profile with subscription and access controls",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "nameEn": { "type": "string" },
+        "slug": { "type": "string" },
+        "ownerEmail": { "type": "string", "format": "email" },
+        "ownerName": { "type": "string" },
+        "ownerUid": { "type": "string" },
+        "phone": { "type": "string" },
+        "whatsapp": { "type": "string" },
+        "logo": { "type": "string" },
+        "coverImage": { "type": "string" },
+        "currency": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "pending", "suspended", "blocked"] },
+        "access": {
+          "type": "object",
+          "description": "Administrative access controls for restaurant dashboard and public menu",
+          "properties": {
+            "allowDashboard": { "type": "boolean" },
+            "allowPublicMenu": { "type": "boolean" }
+          },
+          "required": ["allowDashboard", "allowPublicMenu"]
+        },
+        "subscription": {
+          "type": "object",
+          "description": "Structured SaaS subscription details and renewal dates",
+          "properties": {
+            "planId": { "type": "string" },
+            "billingCycle": { "type": "string", "enum": ["monthly", "annual"] },
+            "status": { "type": "string", "enum": ["active", "expired", "trial"] },
+            "startDate": { "type": "string" },
+            "renewalDate": { "type": "string" },
+            "price": { "type": "number" },
+            "autoRenew": { "type": "boolean" }
+          },
+          "required": ["planId", "billingCycle", "status", "startDate", "renewalDate", "price"]
+        },
+        "address": { "type": "string" },
+        "city": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "slug", "ownerEmail", "ownerName", "status", "access", "subscription"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Menu category scoped to a specific restaurant",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "restaurantId": { "type": "string" },
+        "name": { "type": "string" },
+        "nameEn": { "type": "string" },
+        "sortOrder": { "type": "number" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "restaurantId", "name", "sortOrder", "isActive"]
+    },
+    "MenuItem": {
+      "title": "MenuItem",
+      "description": "Food or beverage product item scoped to a restaurant and category",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "restaurantId": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "name": { "type": "string" },
+        "nameEn": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "image": { "type": "string" },
+        "isAvailable": { "type": "boolean" },
+        "isPopular": { "type": "boolean" },
+        "isVegetarian": { "type": "boolean" },
+        "isSpicy": { "type": "boolean" },
+        "calories": { "type": "number" },
+        "preparationTime": { "type": "string" },
+        "sortOrder": { "type": "number" }
+      },
+      "required": ["id", "restaurantId", "categoryId", "name", "price", "isAvailable", "sortOrder"]
+    },
+    "RestaurantTable": {
+      "title": "RestaurantTable",
+      "description": "Dine-in table with QR code linking directly to restaurant menu",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "restaurantId": { "type": "string" },
+        "tableNumber": { "type": "string" },
+        "capacity": { "type": "number" },
+        "location": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "restaurantId", "tableNumber", "capacity", "isActive"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order details placed through digital menu / WhatsApp",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "restaurantId": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "tableNumber": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "preparing", "delivered", "cancelled"] },
+        "notes": { "type": "string" },
+        "orderType": { "type": "string", "enum": ["dine_in", "takeaway", "delivery"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "restaurantId", "orderNumber", "totalAmount", "status", "orderType", "createdAt"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "Customer feedback and rating with moderation toggle",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "restaurantId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "isApproved": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "restaurantId", "customerName", "rating", "isApproved", "createdAt"]
+    },
+    "SubscriptionPlan": {
+      "title": "SubscriptionPlan",
+      "description": "Dynamic SaaS tier configured by Super Admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "nameEn": { "type": "string" },
+        "priceMonthly": { "type": "number" },
+        "priceYearly": { "type": "number" },
+        "yearlyDiscountPercent": { "type": "number" },
+        "currency": { "type": "string" },
+        "description": { "type": "string" },
+        "isPopular": { "type": "boolean" },
+        "isActive": { "type": "boolean" },
+        "sortOrder": { "type": "number" },
+        "isDefaultNew": { "type": "boolean" },
+        "trialDays": { "type": "number" }
+      },
+      "required": ["id", "name", "priceMonthly", "priceYearly", "isActive", "sortOrder"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "Super admin and staff security audit trail",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "action": { "type": "string" },
+        "actorEmail": { "type": "string" },
+        "actorRole": { "type": "string" },
+        "targetRestaurantId": { "type": "string" },
+        "targetRestaurantName": { "type": "string" },
+        "details": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "action", "actorEmail", "timestamp"]
+    },
+    "ManualPaymentRecord": {
+      "title": "ManualPaymentRecord",
+      "description": "Documented offline / manual subscription payment",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "restaurantId": { "type": "string" },
+        "restaurantName": { "type": "string" },
+        "planId": { "type": "string" },
+        "planName": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "billingCycle": { "type": "string" },
+        "recordedByEmail": { "type": "string" },
+        "notes": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "referenceNumber": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "restaurantId", "amount", "recordedByEmail", "createdAt"]
+    }
+  },
+  "firestore": {
+    "collections": {
+      "/restaurants/{restaurantId}": {
+        "entity": "Restaurant",
+        "description": "Individual restaurant document"
+      },
+      "/restaurants/{restaurantId}/categories/{categoryId}": {
+        "entity": "Category",
+        "description": "Restaurant menu categories"
+      },
+      "/restaurants/{restaurantId}/menu_items/{itemId}": {
+        "entity": "MenuItem",
+        "description": "Restaurant menu items"
+      },
+      "/restaurants/{restaurantId}/tables/{tableId}": {
+        "entity": "RestaurantTable",
+        "description": "Restaurant dine-in tables"
+      },
+      "/restaurants/{restaurantId}/orders/{orderId}": {
+        "entity": "Order",
+        "description": "Orders for a restaurant"
+      },
+      "/restaurants/{restaurantId}/reviews/{reviewId}": {
+        "entity": "Review",
+        "description": "Reviews for a restaurant"
+      },
+      "/restaurants/{restaurantId}/payments/{paymentId}": {
+        "entity": "ManualPaymentRecord",
+        "description": "Payment records for a restaurant"
+      },
+      "/plans/{planId}": {
+        "entity": "SubscriptionPlan",
+        "description": "SaaS subscription tiers managed by Super Admin"
+      },
+      "/activity_logs/{logId}": {
+        "entity": "ActivityLog",
+        "description": "Platform audit log entries"
+      }
+    }
+  }
+}

@@ -1,0 +1,2228 @@
+import React, { useState } from 'react';
+import {
+  ShieldAlert,
+  Store,
+  Users,
+  CreditCard,
+  Eye,
+  TrendingUp,
+  Search,
+  Filter,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  ExternalLink,
+  ChevronRight,
+  RefreshCw,
+  Bell,
+  Settings,
+  Layers,
+  ArrowUpRight,
+  ShieldCheck,
+  Check,
+  SlidersHorizontal,
+  Plus,
+  Edit,
+  Trash2,
+  Calendar,
+  Lock,
+  Globe,
+  FileText,
+  DollarSign,
+  HelpCircle,
+  Clock,
+  Sparkles,
+  Smartphone,
+  Save,
+  UserCheck,
+  ArrowDown,
+  ArrowUp,
+  X,
+  History,
+  CheckSquare,
+  Cloud,
+  Database,
+  UploadCloud,
+  CheckCircle,
+} from 'lucide-react';
+import {
+  Restaurant,
+  RestaurantStatus,
+  SubscriptionPlan,
+  WebsiteContent,
+  PlatformSettings,
+  PlatformStaff,
+  ActivityLog,
+  ManualPaymentRecord,
+  StaffPermission,
+} from '../types';
+import {
+  store,
+  PRIMARY_SUPER_ADMIN_EMAIL,
+} from '../services/store';
+import { firestoreConfigService, SyncStatus } from '../services/firestoreConfigService';
+import { firestoreRestaurantService, RestaurantSyncStatus } from '../services/firestoreRestaurantService';
+
+interface SuperAdminDashboardProps {
+  restaurants: Restaurant[];
+  onSelectRestaurantId: (id: string) => void;
+  onNavigate: (view: 'landing' | 'super_admin' | 'restaurant_admin' | 'public_menu' | 'register') => void;
+}
+
+export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
+  restaurants,
+  onSelectRestaurantId,
+  onNavigate,
+}) => {
+  const [activeTab, setActiveTab] = useState<
+    'overview' | 'restaurants' | 'plans' | 'website_content' | 'platform_settings' | 'staff_rbac' | 'activity_logs'
+  >('overview');
+
+  // Filter & Search States
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | RestaurantStatus>('all');
+  const [planFilter, setPlanFilter] = useState<string>('all');
+
+  // Store data states
+  const plans = store.getPlans();
+  const websiteContent = store.getWebsiteContent();
+  const platformSettings = store.getPlatformSettings();
+  const staffList = store.getStaff();
+  const activityLogs = store.getActivityLogs();
+  const paymentsList = store.getAllPayments();
+
+  // Modals States
+  const [editingRestaurant, setEditingRestaurant] = useState<Restaurant | null>(null);
+  const [paymentModalRestaurant, setPaymentModalRestaurant] = useState<Restaurant | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState(149);
+  const [paymentMethod, setPaymentMethod] = useState<ManualPaymentRecord['paymentMethod']>('bank_transfer');
+  const [paymentRef, setPaymentRef] = useState('');
+  const [paymentNotes, setPaymentNotes] = useState('');
+
+  // Plans Modal State
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
+  const [planForm, setPlanForm] = useState<Partial<SubscriptionPlan>>({
+    nameAr: '',
+    nameEn: '',
+    descriptionAr: '',
+    monthlyPrice: 149,
+    annualPrice: 1430,
+    annualDiscountPercent: 20,
+    currency: 'ج.م',
+    itemLimit: 50,
+    categoryLimit: 8,
+    tableLimit: 10,
+    branchLimit: 1,
+    userLimit: 2,
+    popular: false,
+    isActive: true,
+    features: ['منيو تفاعلي سريع', 'رمز QR للطاولات', 'استقبال الطلبات عبر واتساب'],
+    featureFlags: {
+      qrStudio: true,
+      tableOrdering: true,
+      whatsappDirect: true,
+      reviewsSystem: false,
+      analytics: false,
+      customDomain: false,
+      appearanceCustomization: false,
+      multiLanguage: false,
+      exportReports: false,
+    },
+  });
+
+  // Website Content Form State
+  const [cmsForm, setCmsForm] = useState<WebsiteContent>(websiteContent);
+  const [cmsSaveNotice, setCmsSaveNotice] = useState(false);
+
+  // Platform Settings Form State
+  const [settingsForm, setSettingsForm] = useState<PlatformSettings>(platformSettings);
+  const [settingsSaveNotice, setSettingsSaveNotice] = useState(false);
+
+  // Firestore Sync & Action States (Phase 3B-1 & Phase 3B-2)
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(firestoreConfigService.getStatus());
+  const [isImporting, setIsImporting] = useState(false);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
+  const [isSavingPlan, setIsSavingPlan] = useState(false);
+  const [planActionError, setPlanActionError] = useState<string | null>(null);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [settingsActionError, setSettingsActionError] = useState<string | null>(null);
+
+  // Restaurants Firestore Sync State (Phase 3B-2)
+  const [restaurantSyncStatus, setRestaurantSyncStatus] = useState<RestaurantSyncStatus>(
+    firestoreRestaurantService.getStatus()
+  );
+  const [isImportingRestaurants, setIsImportingRestaurants] = useState(false);
+  const [restaurantImportNotice, setRestaurantImportNotice] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    const unsubConfig = firestoreConfigService.subscribeStatus(setSyncStatus);
+    const unsubRest = firestoreRestaurantService.subscribeStatus(setRestaurantSyncStatus);
+    return () => {
+      unsubConfig();
+      unsubRest();
+    };
+  }, []);
+
+  // Staff Modal State
+  const [showStaffModal, setShowStaffModal] = useState(false);
+  const [editingStaff, setEditingStaff] = useState<PlatformStaff | null>(null);
+  const [staffName, setStaffName] = useState('');
+  const [staffEmail, setStaffEmail] = useState('');
+  const [staffRole, setStaffRole] = useState<'super_admin' | 'staff'>('staff');
+  const [staffPermissions, setStaffPermissions] = useState<StaffPermission[]>([
+    'manage_restaurants',
+    'manage_subscriptions',
+  ]);
+
+  // Log filter
+  const [logCategoryFilter, setLogCategoryFilter] = useState<string>('all');
+
+  // KPIs
+  const totalTenants = restaurants.length;
+  const activeTenants = restaurants.filter((r) => r.status === 'active').length;
+  const pendingTenants = restaurants.filter((r) => r.status === 'pending').length;
+  const suspendedTenants = restaurants.filter((r) => r.status === 'suspended' || r.status === 'blocked').length;
+
+  const totalViews = restaurants.reduce((sum, r) => sum + (r.viewsCount || 0), 0);
+  const totalOrders = restaurants.reduce((sum, r) => sum + (r.ordersCount || 0), 0);
+
+  // Estimated MRR
+  const estimatedMRR = restaurants.reduce((sum, r) => {
+    if (r.status !== 'active') return sum;
+    const plan = plans.find((p) => p.id === r.subscription.planId);
+    return sum + (plan ? plan.monthlyPrice : 0);
+  }, 0);
+
+  // Filtered Restaurants
+  const filteredRestaurants = restaurants.filter((r) => {
+    const matchesSearch =
+      r.nameAr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      r.nameEn.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      r.slug.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      r.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      r.ownerEmail.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesStatus = statusFilter === 'all' || r.status === statusFilter;
+    const matchesPlan = planFilter === 'all' || r.subscription.planId === planFilter;
+
+    return matchesSearch && matchesStatus && matchesPlan;
+  });
+
+  // Handle Manual Payment Save
+  const handleSavePayment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!paymentModalRestaurant) return;
+
+    store.recordManualPayment({
+      restaurantId: paymentModalRestaurant.id,
+      planId: paymentModalRestaurant.subscription.planId,
+      amount: Number(paymentAmount),
+      currency: paymentModalRestaurant.currency,
+      billingCycle: paymentModalRestaurant.subscription.billingCycle,
+      paymentMethod,
+      referenceNumber: paymentRef,
+      notes: paymentNotes,
+      date: new Date().toISOString().split('T')[0],
+      recordedBy: PRIMARY_SUPER_ADMIN_EMAIL,
+    });
+
+    setPaymentModalRestaurant(null);
+    setPaymentRef('');
+    setPaymentNotes('');
+    alert('تم تسجيل الدفعة اليدوية بنجاح وإضافتها لسجل المدفوعات.');
+  };
+
+  // Open Plan Modal
+  const handleOpenPlanModal = (plan?: SubscriptionPlan) => {
+    if (plan) {
+      setEditingPlan(plan);
+      setPlanForm({ ...plan });
+    } else {
+      setEditingPlan(null);
+      setPlanForm({
+        id: `plan-${Date.now().toString().slice(-4)}`,
+        nameAr: '',
+        nameEn: '',
+        descriptionAr: '',
+        monthlyPrice: 199,
+        annualPrice: 1910,
+        annualDiscountPercent: 20,
+        currency: 'ج.م',
+        itemLimit: 100,
+        categoryLimit: 12,
+        tableLimit: 25,
+        branchLimit: 2,
+        userLimit: 3,
+        popular: false,
+        isActive: true,
+        sortOrder: plans.length + 1,
+        isDefault: false,
+        features: ['منيو تفاعلي', 'رمز QR للطاولات', 'طلبات واتساب'],
+        featureFlags: {
+          qrStudio: true,
+          tableOrdering: true,
+          whatsappDirect: true,
+          reviewsSystem: false,
+          analytics: false,
+          customDomain: false,
+          appearanceCustomization: false,
+          multiLanguage: false,
+          exportReports: false,
+        },
+      });
+    }
+    setShowPlanModal(true);
+  };
+
+  // Save Plan
+  const handleSavePlan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!planForm.nameAr?.trim() || !planForm.id?.trim()) return;
+
+    const planToSave: SubscriptionPlan = {
+      id: planForm.id,
+      nameAr: planForm.nameAr,
+      nameEn: planForm.nameEn || planForm.nameAr,
+      descriptionAr: planForm.descriptionAr || '',
+      monthlyPrice: Number(planForm.monthlyPrice || 0),
+      annualPrice: Number(planForm.annualPrice || 0),
+      annualDiscountPercent: Number(planForm.annualDiscountPercent || 20),
+      currency: planForm.currency || 'ج.م',
+      popular: !!planForm.popular,
+      badge: planForm.badge,
+      itemLimit: Number(planForm.itemLimit || 50),
+      categoryLimit: Number(planForm.categoryLimit || 10),
+      tableLimit: Number(planForm.tableLimit || 10),
+      branchLimit: Number(planForm.branchLimit || 1),
+      userLimit: Number(planForm.userLimit || 2),
+      isActive: planForm.isActive !== false,
+      sortOrder: Number(planForm.sortOrder || plans.length + 1),
+      isDefault: !!planForm.isDefault,
+      features: planForm.features || [],
+      featureFlags: planForm.featureFlags || {
+        qrStudio: true,
+        tableOrdering: true,
+        whatsappDirect: true,
+        reviewsSystem: false,
+        analytics: false,
+        customDomain: false,
+        appearanceCustomization: false,
+        multiLanguage: false,
+        exportReports: false,
+      },
+    };
+
+    setIsSavingPlan(true);
+    setPlanActionError(null);
+    try {
+      await firestoreConfigService.savePlan(planToSave);
+      setShowPlanModal(false);
+    } catch (err: any) {
+      setPlanActionError(err?.message || 'حدث خطأ أثناء حفظ الباقة في Cloud Firestore');
+    } finally {
+      setIsSavingPlan(false);
+    }
+  };
+
+  // Save CMS Content
+  const handleSaveCMS = (e: React.FormEvent) => {
+    e.preventDefault();
+    store.updateWebsiteContent(cmsForm);
+    setCmsSaveNotice(true);
+    setTimeout(() => setCmsSaveNotice(false), 3000);
+  };
+
+  // Save Platform Settings to Firestore (Phase 3B-1)
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingSettings(true);
+    setSettingsActionError(null);
+    try {
+      await firestoreConfigService.savePlatformSettings(settingsForm);
+      setSettingsSaveNotice(true);
+      setTimeout(() => setSettingsSaveNotice(false), 3000);
+    } catch (err: any) {
+      setSettingsActionError(err?.message || 'فشل حفظ الإعدادات في Cloud Firestore');
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
+  // Import local plans and settings to Cloud Firestore on Super Admin approval
+  const handleImportToFirestore = async () => {
+    if (
+      !window.confirm(
+        'هل توافق على استيراد الخطط وإعدادات المنصة الحالية إلى Cloud Firestore الآن؟ هذه العملية آمنة ولا تنشئ أي تكرار.'
+      )
+    ) {
+      return;
+    }
+    setIsImporting(true);
+    setImportNotice(null);
+    try {
+      const res = await firestoreConfigService.importLocalDataToFirestore(plans, platformSettings);
+      setImportNotice(
+        `✓ تم بنجاح استيراد ${res.importedPlansCount} باقة وإعدادات المنصة إلى Cloud Firestore (europe-west2)!`
+      );
+      setTimeout(() => setImportNotice(null), 6000);
+    } catch (err: any) {
+      alert(err?.message || 'فشل استيراد البيانات إلى Cloud Firestore');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  // Import local restaurants to Cloud Firestore (Phase 3B-2)
+  const handleImportRestaurantsToFirestore = async () => {
+    if (
+      !window.confirm(
+        'هل توافق على استيراد واعتماد المطاعم الحالية إلى Cloud Firestore الآن؟ هذه العملية آمنة وتحافظ على المعرفات وتنشئ طوابع زمنية موثقة (renewalTimestamp).'
+      )
+    ) {
+      return;
+    }
+    setIsImportingRestaurants(true);
+    setRestaurantImportNotice(null);
+    try {
+      const res = await firestoreRestaurantService.importLocalRestaurantsToFirestore(restaurants);
+      setRestaurantImportNotice(
+        `✓ تم بنجاح استيراد ومزامنة ${res.importedCount} مطاعم إلى Cloud Firestore (europe-west2)!`
+      );
+      setTimeout(() => setRestaurantImportNotice(null), 6000);
+    } catch (err: any) {
+      alert(err?.message || 'فشل استيراد المطاعم إلى Cloud Firestore');
+    } finally {
+      setIsImportingRestaurants(false);
+    }
+  };
+
+  // Handle Staff Save
+  const handleSaveStaff = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!staffEmail.trim() || !staffName.trim()) return;
+
+    const staffToSave: PlatformStaff = {
+      id: editingStaff ? editingStaff.id : `staff-${Date.now().toString().slice(-4)}`,
+      name: staffName,
+      email: staffEmail.toLowerCase().trim(),
+      role: staffRole,
+      permissions: staffPermissions,
+      isActive: editingStaff ? editingStaff.isActive : true,
+      createdAt: editingStaff ? editingStaff.createdAt : new Date().toISOString().split('T')[0],
+    };
+
+    store.saveStaffMember(staffToSave);
+    setShowStaffModal(false);
+  };
+
+  // Impersonate / enter restaurant dashboard
+  const handleImpersonateRestaurant = (restaurant: Restaurant) => {
+    store.logActivity({
+      actorEmail: PRIMARY_SUPER_ADMIN_EMAIL,
+      actorName: 'Super Admin',
+      category: 'security',
+      action: `دخول إداري للوحة مطعم: ${restaurant.nameAr}`,
+      details: `تم الدخول للوحة تحكم المطعم (معرف: ${restaurant.id}) لغرض المتابعة والدعم الفني.`,
+      targetId: restaurant.id,
+    });
+    onSelectRestaurantId(restaurant.id);
+    onNavigate('restaurant_admin');
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-['Cairo',sans-serif] pb-20">
+      {/* Top Header */}
+      <div className="bg-slate-900 border-b border-slate-800 px-4 sm:px-6 lg:px-8 py-5">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-600 text-slate-950 flex items-center justify-center font-black shadow-lg shadow-amber-500/20">
+              <ShieldAlert className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl sm:text-2xl font-black text-white">
+                  لوحة تحكم السوبر أدمن (Super Admin)
+                </h1>
+                <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 font-bold text-xs px-2.5 py-0.5 rounded-full">
+                  المالك: {PRIMARY_SUPER_ADMIN_EMAIL}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                التحكم الديناميكي الشامل: إدارة الباقات والأسعار، محتوى الموقع (CMS)، المستأجرين، الموظفين، وسجلات النشاط.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onNavigate('landing')}
+              className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl border border-slate-700 transition flex items-center gap-1.5"
+            >
+              <Globe className="w-3.5 h-3.5 text-amber-400" />
+              <span>الموقع العام</span>
+            </button>
+            <button
+              onClick={() => onNavigate('register')}
+              className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs px-4 py-2 rounded-xl transition flex items-center gap-1.5 shadow"
+            >
+              <Plus className="w-4 h-4" />
+              <span>تسجيل مطعم جديد</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Tabs Navigation */}
+      <div className="bg-slate-900/60 border-b border-slate-800 sticky top-16 z-20 backdrop-blur-md">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-1 overflow-x-auto scrollbar-none py-2 text-xs sm:text-sm font-bold">
+            <button
+              onClick={() => setActiveTab('overview')}
+              className={`px-4 py-2 rounded-xl whitespace-nowrap transition flex items-center gap-2 ${
+                activeTab === 'overview'
+                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <TrendingUp className="w-4 h-4" />
+              <span>نظرة عامة والتقارير</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('restaurants')}
+              className={`px-4 py-2 rounded-xl whitespace-nowrap transition flex items-center gap-2 ${
+                activeTab === 'restaurants'
+                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Store className="w-4 h-4" />
+              <span>إدارة المطاعم ({restaurants.length})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('plans')}
+              className={`px-4 py-2 rounded-xl whitespace-nowrap transition flex items-center gap-2 ${
+                activeTab === 'plans'
+                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <CreditCard className="w-4 h-4" />
+              <span>الباقات والأسعار ({plans.length})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('website_content')}
+              className={`px-4 py-2 rounded-xl whitespace-nowrap transition flex items-center gap-2 ${
+                activeTab === 'website_content'
+                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Globe className="w-4 h-4" />
+              <span>محتوى الموقع (CMS)</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('platform_settings')}
+              className={`px-4 py-2 rounded-xl whitespace-nowrap transition flex items-center gap-2 ${
+                activeTab === 'platform_settings'
+                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Settings className="w-4 h-4" />
+              <span>إعدادات المنصة</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('staff_rbac')}
+              className={`px-4 py-2 rounded-xl whitespace-nowrap transition flex items-center gap-2 ${
+                activeTab === 'staff_rbac'
+                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              <span>الموظفون والصلاحيات ({staffList.length})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('activity_logs')}
+              className={`px-4 py-2 rounded-xl whitespace-nowrap transition flex items-center gap-2 ${
+                activeTab === 'activity_logs'
+                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <History className="w-4 h-4" />
+              <span>سجل النشاطات ({activityLogs.length})</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Container */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-8">
+        {/* TAB 1: OVERVIEW & REPORTS */}
+        {activeTab === 'overview' && (
+          <div className="space-y-8">
+            {/* KPI Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+              <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+                <span className="text-slate-400 text-xs font-semibold">إجمالي المطاعم</span>
+                <div className="text-2xl font-black text-white mt-1">{totalTenants}</div>
+                <div className="text-[11px] text-amber-400 mt-1 flex items-center gap-1">
+                  <Store className="w-3 h-3" />
+                  <span>جميع المسجلين</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+                <span className="text-emerald-400 text-xs font-semibold">المطاعم النشطة</span>
+                <div className="text-2xl font-black text-emerald-400 mt-1">{activeTenants}</div>
+                <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                  <span>اشتراك وتفعيل سارٍ</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+                <span className="text-amber-400 text-xs font-semibold">طلبات جديدة</span>
+                <div className="text-2xl font-black text-amber-400 mt-1">{pendingTenants}</div>
+                <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3 text-amber-400" />
+                  <span>في انتظار الموافقة</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+                <span className="text-amber-400 text-xs font-semibold">الدخل الشهري المتوقع</span>
+                <div className="text-2xl font-black text-white mt-1">
+                  {estimatedMRR.toLocaleString()} <span className="text-xs text-amber-400">{platformSettings.defaultCurrency || 'ج.م'}</span>
+                </div>
+                <div className="text-[11px] text-emerald-400 mt-1 flex items-center gap-1">
+                  <TrendingUp className="w-3 h-3" />
+                  <span>MRR تقديري</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+                <span className="text-slate-400 text-xs font-semibold">استعراضات المنيو</span>
+                <div className="text-2xl font-black text-white mt-1">{totalViews.toLocaleString()}</div>
+                <div className="text-[11px] text-blue-400 mt-1 flex items-center gap-1">
+                  <Eye className="w-3 h-3" />
+                  <span>زيارة حقيقية</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+                <span className="text-slate-400 text-xs font-semibold">طلبات الواتساب</span>
+                <div className="text-2xl font-black text-emerald-400 mt-1">{totalOrders.toLocaleString()}</div>
+                <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
+                  <CreditCard className="w-3 h-3 text-emerald-400" />
+                  <span>طلب مباشر</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Two Column Grid: Plans Distribution & Recent Logs */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              {/* Plans Distribution */}
+              <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <h3 className="font-bold text-white text-base flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-amber-400" />
+                    <span>توزيع المشتركين حسب الباقات</span>
+                  </h3>
+                  <button
+                    onClick={() => setActiveTab('plans')}
+                    className="text-xs text-amber-400 hover:underline"
+                  >
+                    إدارة الباقات
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {plans.map((p) => {
+                    const count = restaurants.filter(
+                      (r) => r.subscription.planId === p.id && r.status === 'active'
+                    ).length;
+                    const percent = totalTenants > 0 ? Math.round((count / totalTenants) * 100) : 0;
+
+                    return (
+                      <div key={p.id} className="bg-slate-950 p-4 rounded-2xl border border-slate-800/80 space-y-2">
+                        <div className="flex justify-between items-center text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-white">{p.nameAr}</span>
+                            <span className="text-slate-400">({p.monthlyPrice} {p.currency || 'ج.م'}/شهر)</span>
+                          </div>
+                          <span className="text-amber-400 font-black">{count} مطعم ({percent}%)</span>
+                        </div>
+                        <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                          <div
+                            className="bg-amber-500 h-full rounded-full transition-all duration-500"
+                            style={{ width: `${percent}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Recent Activity Stream */}
+              <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <h3 className="font-bold text-white text-base flex items-center gap-2">
+                    <History className="w-4 h-4 text-emerald-400" />
+                    <span>سجل النشاطات الإدارية الأخير (Activity Logs)</span>
+                  </h3>
+                  <button
+                    onClick={() => setActiveTab('activity_logs')}
+                    className="text-xs text-amber-400 hover:underline"
+                  >
+                    مشاهدة السجل كاملاً
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {activityLogs.slice(0, 5).map((log) => (
+                    <div
+                      key={log.id}
+                      className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800/80 flex items-start justify-between gap-3 text-xs"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-white">{log.action}</span>
+                          <span className="bg-slate-800 text-slate-400 px-2 py-0.5 rounded text-[10px]">
+                            {log.category}
+                          </span>
+                        </div>
+                        <p className="text-slate-400 text-[11px]">{log.details}</p>
+                        <div className="text-[10px] text-slate-500 font-mono">
+                          بواسطة: {log.actorName} ({log.actorEmail})
+                        </div>
+                      </div>
+                      <span className="text-[10px] text-slate-500 whitespace-nowrap">{log.timestamp}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: RESTAURANTS MANAGEMENT */}
+        {activeTab === 'restaurants' && (
+          <div className="space-y-6">
+            {/* Restaurant Firestore Status Banner (Phase 3B-2) */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg">
+              <div className="flex items-center gap-3">
+                <span
+                  className={`w-3 h-3 rounded-full ${
+                    restaurantSyncStatus.isConnected
+                      ? 'bg-emerald-400 animate-pulse'
+                      : 'bg-amber-400'
+                  }`}
+                />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-white text-xs flex items-center gap-1.5">
+                      <Database className="w-4 h-4 text-amber-400" />
+                      <span>سحابة المطاعم (Cloud Firestore):</span>
+                    </span>
+                    <span className="text-emerald-400 font-mono text-xs font-bold">
+                      {restaurantSyncStatus.restaurantsCount} مطعم متصل
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    التحكم المتعدد بالمستأجرين (Multi-Tenant) وتاريخ التجديد الموثق بطابع Timestamp سحابي.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleImportRestaurantsToFirestore}
+                  disabled={isImportingRestaurants}
+                  className="bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold text-xs px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 border border-amber-500/30 cursor-pointer disabled:opacity-50"
+                  title="مزامنة واعتماد المطاعم في Cloud Firestore"
+                >
+                  <UploadCloud className="w-4 h-4" />
+                  <span>
+                    {isImportingRestaurants ? 'جارٍ المزامنة السحابية...' : 'مزامنة المطاعم مع Firestore'}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {restaurantImportNotice && (
+              <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-3 rounded-xl text-xs font-bold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>{restaurantImportNotice}</span>
+              </div>
+            )}
+
+            {/* Search and Filters Bar */}
+            <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="relative w-full md:w-80">
+                <Search className="w-4 h-4 text-slate-400 absolute right-3 top-3.5" />
+                <input
+                  type="text"
+                  placeholder="بحث باسم المطعم، المدينة، البريد، الرابط..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              {/* Status Filter */}
+              <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+                <span className="text-xs text-slate-400 font-bold ml-1">الحالة:</span>
+                {(['all', 'active', 'pending', 'suspended', 'blocked'] as const).map((st) => (
+                  <button
+                    key={st}
+                    onClick={() => setStatusFilter(st)}
+                    className={`text-xs px-3 py-1.5 rounded-lg font-bold transition ${
+                      statusFilter === st
+                        ? 'bg-amber-500 text-slate-950'
+                        : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                    }`}
+                  >
+                    {st === 'all'
+                      ? `الكل (${restaurants.length})`
+                      : st === 'active'
+                      ? 'نشط'
+                      : st === 'pending'
+                      ? 'انتظار'
+                      : st === 'suspended'
+                      ? 'معلق'
+                      : 'محظور'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Restaurants Table */}
+            <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
+              <div className="overflow-x-auto">
+                <table className="w-full text-right text-xs">
+                  <thead className="bg-slate-800/80 text-slate-400 uppercase font-bold border-b border-slate-800">
+                    <tr>
+                      <th className="px-6 py-4">المطعم والمعرف</th>
+                      <th className="px-6 py-4">المدينة والتصنيف</th>
+                      <th className="px-6 py-4">الباقة والاشتراك</th>
+                      <th className="px-6 py-4 text-center">التحكم بالوصول</th>
+                      <th className="px-6 py-4">الحالة</th>
+                      <th className="px-6 py-4 text-center">الإجراءات والتحكم الإداري</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/80">
+                    {filteredRestaurants.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                          لا توجد مطاعم مطابقة لمعايير البحث
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredRestaurants.map((restaurant) => {
+                        const plan = plans.find((p) => p.id === restaurant.subscription.planId);
+
+                        return (
+                          <tr key={restaurant.id} className="hover:bg-slate-800/40 transition">
+                            {/* Restaurant Info */}
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-3">
+                                <img
+                                  src={restaurant.logoUrl}
+                                  alt={restaurant.nameAr}
+                                  className="w-10 h-10 rounded-xl object-cover border border-slate-700"
+                                />
+                                <div>
+                                  <div className="font-bold text-white text-sm">
+                                    {restaurant.nameAr}
+                                  </div>
+                                  <div className="text-[11px] text-slate-400 font-mono">
+                                    ID: {restaurant.id} • /{restaurant.slug}
+                                  </div>
+                                  <div className="text-[10px] text-slate-400 flex items-center gap-1.5 flex-wrap">
+                                    <span>المالك: {restaurant.ownerName || restaurant.ownerEmail}</span>
+                                    {restaurant.ownerUid ? (
+                                      <span className="text-emerald-400 font-mono text-[9px] bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.2 rounded font-bold" title={restaurant.ownerUid}>
+                                        UID: {restaurant.ownerUid.slice(0, 8)}...
+                                      </span>
+                                    ) : (
+                                      <span className="text-amber-400 text-[9px] bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.2 rounded font-bold">
+                                        بانتظار ربط UID
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* City & Cuisine */}
+                            <td className="px-6 py-4">
+                              <div className="text-slate-200 font-bold">{restaurant.city}</div>
+                              <div className="text-[11px] text-slate-400">{restaurant.cuisineType}</div>
+                            </td>
+
+                            {/* Plan & Renewal */}
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-1.5">
+                                <span className="bg-slate-800 border border-slate-700 text-amber-400 px-2 py-0.5 rounded font-bold">
+                                  {plan?.nameAr || restaurant.subscription.planId}
+                                </span>
+                                <span className="text-[10px] text-slate-400">
+                                  ({restaurant.subscription.billingCycle === 'annual' ? 'سنوي' : 'شهري'})
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-slate-400 mt-1">
+                                ينتهي في: {restaurant.subscription.renewalDate}
+                              </div>
+                            </td>
+
+                            {/* Independent Access Toggles */}
+                            <td className="px-6 py-4 text-center">
+                              <div className="flex flex-col items-center gap-1 text-[11px]">
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={restaurant.access.allowDashboard}
+                                    onChange={async (e) => {
+                                      const checked = e.target.checked;
+                                      try {
+                                        await firestoreRestaurantService.updateRestaurantAccess(restaurant.id, {
+                                          ...restaurant.access,
+                                          allowDashboard: checked,
+                                        });
+                                      } catch (err: any) {
+                                        // Offline fallback
+                                        store.updateRestaurantAccess(restaurant.id, {
+                                          ...restaurant.access,
+                                          allowDashboard: checked,
+                                        });
+                                      }
+                                    }}
+                                    className="w-3.5 h-3.5 rounded text-amber-500 bg-slate-950 border-slate-700"
+                                  />
+                                  <span className="text-slate-300">لوحة التحكم</span>
+                                </label>
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={restaurant.access.allowPublicMenu}
+                                    onChange={async (e) => {
+                                      const checked = e.target.checked;
+                                      try {
+                                        await firestoreRestaurantService.updateRestaurantAccess(restaurant.id, {
+                                          ...restaurant.access,
+                                          allowPublicMenu: checked,
+                                        });
+                                      } catch (err: any) {
+                                        // Offline fallback
+                                        store.updateRestaurantAccess(restaurant.id, {
+                                          ...restaurant.access,
+                                          allowPublicMenu: checked,
+                                        });
+                                      }
+                                    }}
+                                    className="w-3.5 h-3.5 rounded text-amber-500 bg-slate-950 border-slate-700"
+                                  />
+                                  <span className="text-slate-300">المنيو العام</span>
+                                </label>
+                              </div>
+                            </td>
+
+                            {/* Status */}
+                            <td className="px-6 py-4">
+                              <select
+                                value={restaurant.status}
+                                onChange={async (e) => {
+                                  const newStatus = e.target.value as RestaurantStatus;
+                                  try {
+                                    await firestoreRestaurantService.updateRestaurantStatus(
+                                      restaurant.id,
+                                      newStatus
+                                    );
+                                  } catch (err: any) {
+                                    // Offline fallback
+                                    store.updateRestaurantStatus(restaurant.id, newStatus);
+                                  }
+                                }}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-bold border focus:outline-none cursor-pointer ${
+                                  restaurant.status === 'active'
+                                    ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                                    : restaurant.status === 'pending'
+                                    ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                                    : restaurant.status === 'blocked'
+                                    ? 'bg-rose-500/20 text-rose-400 border-rose-500/40'
+                                    : 'bg-slate-800 text-slate-400 border-slate-700'
+                                }`}
+                              >
+                                <option value="active" className="bg-slate-900 text-white">
+                                  نشط ومفعل
+                                </option>
+                                <option value="pending" className="bg-slate-900 text-white">
+                                  قيد الانتظار
+                                </option>
+                                <option value="suspended" className="bg-slate-900 text-white">
+                                  معلق مؤقتاً
+                                </option>
+                                <option value="blocked" className="bg-slate-900 text-white">
+                                  محظور
+                                </option>
+                              </select>
+                            </td>
+
+                            {/* Actions & Tools */}
+                            <td className="px-6 py-4">
+                              <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                                {/* Impersonate / Enter Dashboard */}
+                                <button
+                                  onClick={() => handleImpersonateRestaurant(restaurant)}
+                                  title="دخول لوحة تحكم المطعم (مع تسجيل بالنشاطات)"
+                                  className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-lg font-bold text-xs flex items-center gap-1 transition"
+                                >
+                                  <Store className="w-3.5 h-3.5" />
+                                  <span>دخول اللوحة</span>
+                                </button>
+
+                                {/* Record Payment */}
+                                <button
+                                  onClick={() => {
+                                    setPaymentModalRestaurant(restaurant);
+                                    setPaymentAmount(plan?.monthlyPrice || 149);
+                                  }}
+                                  title="تسجيل دفعة يدوية"
+                                  className="p-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg transition"
+                                >
+                                  <DollarSign className="w-3.5 h-3.5" />
+                                </button>
+
+                                {/* Extend Subscription (Phase 3B-2: Firestore Timestamp) */}
+                                <button
+                                  onClick={async () => {
+                                    if (
+                                      window.confirm(
+                                        `هل تريد تمديد اشتراك ${restaurant.nameAr} لـ 30 يوماً إضافياً في Cloud Firestore؟`
+                                      )
+                                    ) {
+                                      try {
+                                        await firestoreRestaurantService.updateRestaurantSubscription(
+                                          restaurant.id,
+                                          {
+                                            extendDays: 30,
+                                            status: 'active',
+                                          }
+                                        );
+                                      } catch (err: any) {
+                                        // Offline fallback
+                                        store.extendRestaurantSubscription(restaurant.id, 1);
+                                      }
+                                    }
+                                  }}
+                                  title="تمديد الاشتراك 30 يوماً إضافياً وتحديث Timestamp"
+                                  className="p-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-lg transition cursor-pointer"
+                                >
+                                  <Calendar className="w-3.5 h-3.5" />
+                                </button>
+
+                                {/* View Public Menu */}
+                                <button
+                                  onClick={() => {
+                                    onSelectRestaurantId(restaurant.id);
+                                    onNavigate('public_menu');
+                                  }}
+                                  title="فتح المنيو العام"
+                                  className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5 text-blue-400" />
+                                </button>
+
+                                {/* Delete Restaurant (Phase 3B-2: Super Admin Firestore Delete) */}
+                                <button
+                                  onClick={async () => {
+                                    if (
+                                      window.confirm(
+                                        `تحذير نهائي: هل أنت متأكد من حذف مطعم "${restaurant.nameAr}" نهائياً من Cloud Firestore؟`
+                                      )
+                                    ) {
+                                      try {
+                                        await firestoreRestaurantService.deleteRestaurant(restaurant.id);
+                                      } catch (err: any) {
+                                        store.deleteRestaurant(restaurant.id, 'Super Admin');
+                                      }
+                                    }
+                                  }}
+                                  title="حذف المطعم نهائياً"
+                                  className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-lg transition cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: DYNAMIC PLANS & PRICING MANAGEMENT */}
+        {activeTab === 'plans' && (
+          <div className="space-y-6">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                <div>
+                  <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                    <CreditCard className="w-5 h-5 text-amber-400" />
+                    <span>إدارة باقات الاشتراك والأسعار الديناميكية</span>
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    أنشئ وعدل باقات الاشتراك والأسعار والخصومات والحدود، وتنعكس مباشرة على الموقع للجميع.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={handleImportToFirestore}
+                    disabled={isImporting}
+                    className="bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold text-xs px-3.5 py-2.5 rounded-xl transition flex items-center gap-1.5 border border-amber-500/30"
+                    title="استيراد الباقات والإعدادات الحالية إلى Cloud Firestore"
+                  >
+                    <UploadCloud className="w-4 h-4" />
+                    <span>{isImporting ? 'جارٍ الاستيراد...' : 'مزامنة مع Firestore'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleOpenPlanModal()}
+                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs px-4 py-2.5 rounded-xl transition flex items-center gap-1.5 shadow"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>إنشاء باقة اشتراك جديدة</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Firestore Status Banner */}
+              <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className={`w-2.5 h-2.5 rounded-full ${syncStatus.isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                  <span className="font-bold text-white flex items-center gap-1.5">
+                    <Database className="w-3.5 h-3.5 text-amber-400" />
+                    <span>قاعدة البيانات السحابية:</span>
+                    <span className="text-slate-300 font-mono">ai-studio-menusmart-adc5bf3e-105f-4223-8d17-756477e8257e</span>
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 text-slate-400">
+                  <span>الباقات في Firestore: <strong className="text-white font-mono">{syncStatus.plansCount}</strong></span>
+                  {syncStatus.isFirestoreEmpty && (
+                    <span className="text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20">
+                      السحابة فارغة حالياً (يتم استخدام النسخة المحلية الآمنة)
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {importNotice && (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-emerald-400 text-xs font-bold flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 shrink-0" />
+                  <span>{importNotice}</span>
+                </div>
+              )}
+
+              {planActionError && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-rose-400 text-xs font-bold">
+                  ⚠️ {planActionError}
+                </div>
+              )}
+
+              {/* Plans Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {plans.map((plan) => (
+                  <div
+                    key={plan.id}
+                    className={`bg-slate-950 border rounded-3xl p-6 relative flex flex-col justify-between ${
+                      plan.popular ? 'border-amber-500 shadow-xl shadow-amber-500/10' : 'border-slate-800'
+                    }`}
+                  >
+                    {plan.popular && (
+                      <span className="absolute -top-3 right-6 bg-amber-500 text-slate-950 text-[10px] font-black px-3 py-0.5 rounded-full shadow">
+                        {plan.badge || 'الأكثر طلباً'}
+                      </span>
+                    )}
+
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="text-lg font-black text-white">{plan.nameAr}</h3>
+                          <span className="text-[11px] text-slate-400 font-mono">ID: {plan.id}</span>
+                        </div>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            plan.isActive
+                              ? 'bg-emerald-500/20 text-emerald-400'
+                              : 'bg-rose-500/20 text-rose-400'
+                          }`}
+                        >
+                          {plan.isActive ? 'مفعلة' : 'معطلة'}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-slate-300 min-h-[32px]">{plan.descriptionAr}</p>
+
+                      <div className="space-y-1 bg-slate-900 p-3 rounded-xl border border-slate-800">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-slate-400">السعر الشهري:</span>
+                          <span className="text-white font-bold">
+                            {plan.monthlyPrice} {plan.currency}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-slate-400">السعر السنوي:</span>
+                          <span className="text-amber-400 font-black">
+                            {plan.annualPrice} {plan.currency} (خصم {plan.annualDiscountPercent}%)
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Limits */}
+                      <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-400">
+                        <div>الأصناف: {plan.itemLimit}</div>
+                        <div>التصنيفات: {plan.categoryLimit}</div>
+                        <div>الطاولات: {plan.tableLimit}</div>
+                        <div>الفروع: {plan.branchLimit}</div>
+                      </div>
+
+                      {/* Features */}
+                      <div className="pt-2 border-t border-slate-800/80 space-y-1.5 text-xs text-slate-300">
+                        <span className="text-[11px] font-bold text-slate-400 block">المميزات:</span>
+                        {plan.features.slice(0, 4).map((f, idx) => (
+                          <div key={idx} className="flex items-center gap-1.5">
+                            <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            <span className="truncate">{f}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="mt-6 pt-4 border-t border-slate-800 flex items-center justify-between gap-2">
+                      <button
+                        onClick={() => handleOpenPlanModal(plan)}
+                        className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition"
+                      >
+                        <Edit className="w-3.5 h-3.5 text-amber-400" />
+                        <span>تعديل الباقة</span>
+                      </button>
+
+                      {plans.length > 1 && (
+                        <button
+                          onClick={async () => {
+                            if (window.confirm(`هل أنت متأكد من حذف باقة ${plan.nameAr}؟`)) {
+                              try {
+                                await firestoreConfigService.deletePlan(plan.id, restaurants);
+                              } catch (err: any) {
+                                alert(err?.message || 'حدث خطأ أثناء حذف الباقة من Cloud Firestore');
+                              }
+                            }
+                          }}
+                          className="p-2 hover:bg-rose-900/30 text-rose-400 rounded-xl transition"
+                          title="حذف الباقة"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: WEBSITE CONTENT MANAGEMENT (CMS) */}
+        {activeTab === 'website_content' && (
+          <div className="space-y-6">
+            <form onSubmit={handleSaveCMS} className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-8">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                <div>
+                  <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                    <Globe className="w-5 h-5 text-amber-400" />
+                    <span>إدارة وتخصيص محتوى الموقع الرئيسي (Website Content Management)</span>
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    تعديل كافة العناوين، الأوصاف، المزايا، الأسئلة الشائعة، ومعلومات التواصل التي تظهر في الصفحة الرئيسية.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {cmsSaveNotice && (
+                    <span className="text-xs text-emerald-400 font-bold">
+                      ✓ تم حفظ التغييرات بنجاح ونشرها
+                    </span>
+                  )}
+                  <button
+                    type="submit"
+                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs px-6 py-2.5 rounded-xl shadow flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>حفظ ونشر التعديلات</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 1. Brand Identity */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold text-amber-400 border-b border-slate-800 pb-2">
+                  1. الهوية والاسم والوصف العام للمنصة:
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <label className="block font-bold text-slate-300 mb-1">اسم المنصة:</label>
+                    <input
+                      type="text"
+                      value={cmsForm.platformName}
+                      onChange={(e) => setCmsForm({ ...cmsForm, platformName: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-300 mb-1">الشعار اللفظي (Slogan):</label>
+                    <input
+                      type="text"
+                      value={cmsForm.platformSlogan}
+                      onChange={(e) => setCmsForm({ ...cmsForm, platformSlogan: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="text-xs">
+                  <label className="block font-bold text-slate-300 mb-1">الوصف العام للمنصة:</label>
+                  <textarea
+                    rows={2}
+                    value={cmsForm.platformDescription}
+                    onChange={(e) => setCmsForm({ ...cmsForm, platformDescription: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              {/* 2. Hero Section */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold text-amber-400 border-b border-slate-800 pb-2">
+                  2. نصوص القسم الرئيسي (Hero Section):
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                  <div>
+                    <label className="block font-bold text-slate-300 mb-1">شارة الرأس (Badge):</label>
+                    <input
+                      type="text"
+                      value={cmsForm.hero.badge}
+                      onChange={(e) =>
+                        setCmsForm({ ...cmsForm, hero: { ...cmsForm.hero, badge: e.target.value } })
+                      }
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-300 mb-1">العنوان الرئيسي:</label>
+                    <input
+                      type="text"
+                      value={cmsForm.hero.title}
+                      onChange={(e) =>
+                        setCmsForm({ ...cmsForm, hero: { ...cmsForm.hero, title: e.target.value } })
+                      }
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-300 mb-1">النص المميز الملوّن:</label>
+                    <input
+                      type="text"
+                      value={cmsForm.hero.highlight}
+                      onChange={(e) =>
+                        setCmsForm({
+                          ...cmsForm,
+                          hero: { ...cmsForm.hero, highlight: e.target.value },
+                        })
+                      }
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="text-xs">
+                  <label className="block font-bold text-slate-300 mb-1">النص الفرعي (Subtitle):</label>
+                  <textarea
+                    rows={2}
+                    value={cmsForm.hero.subtitle}
+                    onChange={(e) =>
+                      setCmsForm({
+                        ...cmsForm,
+                        hero: { ...cmsForm.hero, subtitle: e.target.value },
+                      })
+                    }
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              {/* 3. Section Visibility Toggles */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold text-amber-400 border-b border-slate-800 pb-2">
+                  3. إظهار وإخفاء أقسام الموقع:
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  {Object.entries(cmsForm.sectionsVisibility).map(([key, val]) => (
+                    <label
+                      key={key}
+                      className="flex items-center gap-2 p-2.5 bg-slate-950 rounded-xl border border-slate-800 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={val}
+                        onChange={(e) =>
+                          setCmsForm({
+                            ...cmsForm,
+                            sectionsVisibility: {
+                              ...cmsForm.sectionsVisibility,
+                              [key]: e.target.checked,
+                            },
+                          })
+                        }
+                        className="w-4 h-4 rounded text-amber-500 bg-slate-900 border-slate-700"
+                      />
+                      <span className="font-bold text-slate-200 capitalize">قسم: {key}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* 4. Support & Contacts */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold text-amber-400 border-b border-slate-800 pb-2">
+                  4. بيانات الدعم والتواصل:
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                  <div>
+                    <label className="block font-bold text-slate-300 mb-1">واتساب الدعم:</label>
+                    <input
+                      type="text"
+                      value={cmsForm.supportWhatsApp}
+                      onChange={(e) => setCmsForm({ ...cmsForm, supportWhatsApp: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-300 mb-1">بريد الدعم:</label>
+                    <input
+                      type="text"
+                      value={cmsForm.supportEmail}
+                      onChange={(e) => setCmsForm({ ...cmsForm, supportEmail: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-300 mb-1">هاتف الاتصال:</label>
+                    <input
+                      type="text"
+                      value={cmsForm.supportPhone}
+                      onChange={(e) => setCmsForm({ ...cmsForm, supportPhone: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 flex justify-end">
+                <button
+                  type="submit"
+                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs px-8 py-3 rounded-xl shadow flex items-center gap-2 cursor-pointer"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>حفظ ونشر التعديلات على الموقع</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* TAB 5: PLATFORM GENERAL SETTINGS */}
+        {activeTab === 'platform_settings' && (
+          <div className="space-y-6 max-w-4xl">
+            <form onSubmit={handleSaveSettings} className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 text-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                <div>
+                  <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                    <Settings className="w-5 h-5 text-amber-400" />
+                    <span>إعدادات وسياسات المنصة العامة</span>
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    التحكم في فتح وغلق التسجيل، مدة التجربة المجانية، العملات، الضرائب، والإعلانات.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {settingsSaveNotice && (
+                    <span className="text-xs text-emerald-400 font-bold">✓ تم الحفظ بنجاح</span>
+                  )}
+                  <button
+                    type="submit"
+                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs px-6 py-2.5 rounded-xl shadow flex items-center gap-1.5"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>حفظ الإعدادات</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Registration Control */}
+              <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settingsForm.registrationEnabled}
+                    onChange={(e) =>
+                      setSettingsForm({ ...settingsForm, registrationEnabled: e.target.checked })
+                    }
+                    className="w-4 h-4 rounded text-amber-500 bg-slate-900 border-slate-700"
+                  />
+                  <span className="font-bold text-white text-sm">
+                    إتاحة تسجيل مطاعم وشركاء جدد (Allow New Registrations)
+                  </span>
+                </label>
+
+                {!settingsForm.registrationEnabled && (
+                  <div className="pt-2">
+                    <label className="block text-slate-400 mb-1">
+                      الرسالة التي ستظهر للزوار عند محاولة التسجيل:
+                    </label>
+                    <input
+                      type="text"
+                      value={settingsForm.registrationDisabledMessage}
+                      onChange={(e) =>
+                        setSettingsForm({
+                          ...settingsForm,
+                          registrationDisabledMessage: e.target.value,
+                        })
+                      }
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Global Announcement */}
+              <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settingsForm.showGlobalAnnouncement}
+                    onChange={(e) =>
+                      setSettingsForm({
+                        ...settingsForm,
+                        showGlobalAnnouncement: e.target.checked,
+                      })
+                    }
+                    className="w-4 h-4 rounded text-amber-500 bg-slate-900 border-slate-700"
+                  />
+                  <span className="font-bold text-white text-sm">
+                    تفعيل شريط التنبيهات والإعلانات العام للمنصة
+                  </span>
+                </label>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">نص التنبيه:</label>
+                  <input
+                    type="text"
+                    value={settingsForm.globalAnnouncement}
+                    onChange={(e) =>
+                      setSettingsForm({ ...settingsForm, globalAnnouncement: e.target.value })
+                    }
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+              </div>
+
+              {/* Financial defaults */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">
+                    أيام التجربة المجانية (Trial Days):
+                  </label>
+                  <input
+                    type="number"
+                    value={settingsForm.freeTrialDays}
+                    onChange={(e) =>
+                      setSettingsForm({ ...settingsForm, freeTrialDays: Number(e.target.value) })
+                    }
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">العملة الافتراضية:</label>
+                  <input
+                    type="text"
+                    value={settingsForm.defaultCurrency}
+                    onChange={(e) =>
+                      setSettingsForm({ ...settingsForm, defaultCurrency: e.target.value })
+                    }
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">
+                    نسبة الضريبة الافتراضية (%):
+                  </label>
+                  <input
+                    type="number"
+                    value={settingsForm.defaultTaxPercentage}
+                    onChange={(e) =>
+                      setSettingsForm({
+                        ...settingsForm,
+                        defaultTaxPercentage: Number(e.target.value),
+                      })
+                    }
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+              </div>
+
+              {/* Price changes policy */}
+              <div>
+                <label className="block font-bold text-slate-300 mb-1.5">
+                  سياسة تطبيق تغييرات أسعار الباقات:
+                </label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="pricePolicy"
+                      checked={settingsForm.applyPriceChangesTo === 'new_only'}
+                      onChange={() =>
+                        setSettingsForm({ ...settingsForm, applyPriceChangesTo: 'new_only' })
+                      }
+                      className="text-amber-500"
+                    />
+                    <span>على المشتركين الجدد فقط (الحفاظ على أسعار الحاليين)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="pricePolicy"
+                      checked={settingsForm.applyPriceChangesTo === 'all'}
+                      onChange={() =>
+                        setSettingsForm({ ...settingsForm, applyPriceChangesTo: 'all' })
+                      }
+                      className="text-amber-500"
+                    />
+                    <span>على جميع المشتركين الحاليين والجدد عند التجديد</span>
+                  </label>
+                </div>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* TAB 6: STAFF & RBAC MANAGEMENT */}
+        {activeTab === 'staff_rbac' && (
+          <div className="space-y-6">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                <div>
+                  <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                    <Users className="w-5 h-5 text-amber-400" />
+                    <span>إدارة الموظفين والصلاحيات (Staff & RBAC)</span>
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    إضافة مدراء وموظفين وتحديد صلاحيات مستقلة لكل موظف. حساب المالك الرئيسي محمي بالكامل.
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setEditingStaff(null);
+                    setStaffName('');
+                    setStaffEmail('');
+                    setStaffRole('staff');
+                    setStaffPermissions(['manage_restaurants', 'manage_subscriptions']);
+                    setShowStaffModal(true);
+                  }}
+                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs px-4 py-2.5 rounded-xl transition flex items-center gap-1.5 shadow"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>إضافة موظف جديد</span>
+                </button>
+              </div>
+
+              {/* Staff List */}
+              <div className="space-y-3">
+                {staffList.map((member) => {
+                  const isPrimary = member.email === PRIMARY_SUPER_ADMIN_EMAIL;
+
+                  return (
+                    <div
+                      key={member.id}
+                      className={`p-4 rounded-2xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs ${
+                        isPrimary
+                          ? 'bg-amber-500/10 border-amber-500/40'
+                          : 'bg-slate-950 border-slate-800'
+                      }`}
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-black text-white text-sm">{member.name}</span>
+                          <span className="font-mono text-slate-400">({member.email})</span>
+                          {isPrimary && (
+                            <span className="bg-amber-500 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-full">
+                              مالك المنصة الرئيسي
+                            </span>
+                          )}
+                          <span
+                            className={`text-[10px] px-2 py-0.5 rounded ${
+                              member.role === 'super_admin'
+                                ? 'bg-purple-500/20 text-purple-300'
+                                : 'bg-slate-800 text-slate-300'
+                            }`}
+                          >
+                            {member.role === 'super_admin' ? 'مدير عام' : 'موظف تشغيل'}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {member.permissions.map((p) => (
+                            <span
+                              key={p}
+                              className="bg-slate-900 border border-slate-800 text-[10px] text-slate-300 px-2 py-0.5 rounded"
+                            >
+                              {p}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      {!isPrimary && (
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={() => {
+                              setEditingStaff(member);
+                              setStaffName(member.name);
+                              setStaffEmail(member.email);
+                              setStaffRole(member.role);
+                              setStaffPermissions(member.permissions);
+                              setShowStaffModal(true);
+                            }}
+                            className="p-2 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg transition"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`هل أنت متأكد من حذف حساب ${member.name}؟`)) {
+                                store.deleteStaffMember(member.id);
+                              }
+                            }}
+                            className="p-2 hover:bg-rose-900/30 text-rose-400 rounded-lg transition"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 7: ACTIVITY LOGS */}
+        {activeTab === 'activity_logs' && (
+          <div className="space-y-6">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-3">
+                <div>
+                  <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                    <History className="w-5 h-5 text-amber-400" />
+                    <span>سجل العمليات والتدقيق الأمني (Activity & Audit Logs)</span>
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    تسجيل تلقائي مشدد لكافة العمليات الإدارية الحساسة لضمان الشفافية والأمان.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400 font-bold">تصفية:</span>
+                  <select
+                    value={logCategoryFilter}
+                    onChange={(e) => setLogCategoryFilter(e.target.value)}
+                    className="bg-slate-950 border border-slate-800 text-xs text-white rounded-xl px-3 py-1.5 focus:outline-none"
+                  >
+                    <option value="all">جميع العمليات</option>
+                    <option value="restaurants">المطاعم</option>
+                    <option value="subscriptions">الاشتراكات</option>
+                    <option value="pricing">الأسعار والباقات</option>
+                    <option value="content">المحتوى</option>
+                    <option value="settings">الإعدادات</option>
+                    <option value="staff">الموظفون</option>
+                    <option value="security">الأمان والدخول</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {activityLogs
+                  .filter((l) => logCategoryFilter === 'all' || l.category === logCategoryFilter)
+                  .map((log) => (
+                    <div
+                      key={log.id}
+                      className="bg-slate-950 p-4 rounded-2xl border border-slate-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-white text-sm">{log.action}</span>
+                          <span className="bg-slate-800 text-amber-400 px-2 py-0.5 rounded font-mono text-[10px]">
+                            {log.category}
+                          </span>
+                        </div>
+                        <p className="text-slate-300">{log.details}</p>
+                        <div className="text-[10px] text-slate-500 font-mono">
+                          المسؤول: {log.actorName} ({log.actorEmail})
+                        </div>
+                      </div>
+                      <span className="text-[11px] text-slate-500 font-mono whitespace-nowrap">
+                        {log.timestamp}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Manual Payment Modal */}
+      {paymentModalRestaurant && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-md space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-white text-base">
+                تسجيل دفعة يدوية: {paymentModalRestaurant.nameAr}
+              </h3>
+              <button
+                onClick={() => setPaymentModalRestaurant(null)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl text-amber-300 text-[11px] font-medium">
+              تنبيه: هذا السجل هو إثبات دفع يدوي مسجل من قبل الإدارة، ولا يمثل عملية دفع إلكتروني مؤكدة عبر بوابة دفع.
+            </div>
+
+            <form onSubmit={handleSavePayment} className="space-y-4">
+              <div>
+                <label className="block font-bold text-slate-300 mb-1">
+                  المبلغ المسدد ({paymentModalRestaurant.currency}) *:
+                </label>
+                <input
+                  type="number"
+                  required
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(Number(e.target.value))}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-300 mb-1">طريقة الدفع:</label>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) =>
+                    setPaymentMethod(e.target.value as ManualPaymentRecord['paymentMethod'])
+                  }
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                >
+                  <option value="bank_transfer">تحويل بنكي</option>
+                  <option value="cash">نقداً (كاش)</option>
+                  <option value="pos">شبكة كاشير (POS)</option>
+                  <option value="cheque">شيك مصرفي</option>
+                  <option value="manual_admin">تسوية إدارية</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-300 mb-1">
+                  رقم المرجع / الحوالة البنكية:
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. TR-998823"
+                  value={paymentRef}
+                  onChange={(e) => setPaymentRef(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-300 mb-1">ملاحظات إضافية:</label>
+                <textarea
+                  rows={2}
+                  placeholder="ملاحظات المحاسبة..."
+                  value={paymentNotes}
+                  onChange={(e) => setPaymentNotes(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPaymentModalRestaurant(null)}
+                  className="px-4 py-2 text-slate-400 hover:text-white"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-5 py-2 rounded-xl shadow"
+                >
+                  تسجيل الدفعة وتمديد الاشتراك
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Plan Add/Edit Modal */}
+      {showPlanModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-2xl space-y-4 text-xs my-8">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-white text-base">
+                {editingPlan ? 'تعديل باقة الاشتراك' : 'إنشاء باقة اشتراك جديدة'}
+              </h3>
+              <button
+                onClick={() => setShowPlanModal(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePlan} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">
+                    اسم الباقة بالعربية *:
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={planForm.nameAr}
+                    onChange={(e) => setPlanForm({ ...planForm, nameAr: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">
+                    معرف الباقة الفريد (ID) *:
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    disabled={!!editingPlan}
+                    value={planForm.id}
+                    onChange={(e) => setPlanForm({ ...planForm, id: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-300 mb-1">وصف الباقة:</label>
+                <input
+                  type="text"
+                  value={planForm.descriptionAr}
+                  onChange={(e) => setPlanForm({ ...planForm, descriptionAr: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">
+                    السعر الشهري ({planForm.currency || 'ج.م'}):
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    value={planForm.monthlyPrice}
+                    onChange={(e) =>
+                      setPlanForm({ ...planForm, monthlyPrice: Number(e.target.value) })
+                    }
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">
+                    السعر السنوي ({planForm.currency || 'ج.م'}):
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    value={planForm.annualPrice}
+                    onChange={(e) =>
+                      setPlanForm({ ...planForm, annualPrice: Number(e.target.value) })
+                    }
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">العملة:</label>
+                  <input
+                    type="text"
+                    placeholder="ج.م"
+                    value={planForm.currency || 'ج.م'}
+                    onChange={(e) => setPlanForm({ ...planForm, currency: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">شارة الباقة (Badge):</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. الأكثر اختياراً"
+                    value={planForm.badge || ''}
+                    onChange={(e) => setPlanForm({ ...planForm, badge: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+              </div>
+
+              {/* Limits */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">حد الأصناف:</label>
+                  <input
+                    type="number"
+                    value={planForm.itemLimit}
+                    onChange={(e) =>
+                      setPlanForm({ ...planForm, itemLimit: Number(e.target.value) })
+                    }
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">حد التصنيفات:</label>
+                  <input
+                    type="number"
+                    value={planForm.categoryLimit}
+                    onChange={(e) =>
+                      setPlanForm({ ...planForm, categoryLimit: Number(e.target.value) })
+                    }
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">حد الطاولات:</label>
+                  <input
+                    type="number"
+                    value={planForm.tableLimit}
+                    onChange={(e) =>
+                      setPlanForm({ ...planForm, tableLimit: Number(e.target.value) })
+                    }
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">حد الفروع:</label>
+                  <input
+                    type="number"
+                    value={planForm.branchLimit}
+                    onChange={(e) =>
+                      setPlanForm({ ...planForm, branchLimit: Number(e.target.value) })
+                    }
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+              </div>
+
+              {/* Toggles */}
+              <div className="flex flex-wrap gap-4 pt-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={planForm.isActive}
+                    onChange={(e) => setPlanForm({ ...planForm, isActive: e.target.checked })}
+                    className="w-4 h-4 rounded text-amber-500"
+                  />
+                  <span>الباقة مفعلة ومتاحة للاشتراك</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={planForm.popular}
+                    onChange={(e) => setPlanForm({ ...planForm, popular: e.target.checked })}
+                    className="w-4 h-4 rounded text-amber-500"
+                  />
+                  <span>تمييز كباقة شائعة (Popular)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={planForm.isDefault}
+                    onChange={(e) => setPlanForm({ ...planForm, isDefault: e.target.checked })}
+                    className="w-4 h-4 rounded text-amber-500"
+                  />
+                  <span>الباقة الافتراضية للمشترك الجديد</span>
+                </label>
+              </div>
+
+              <div className="pt-3 flex justify-end gap-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowPlanModal(false)}
+                  className="px-4 py-2 text-slate-400 hover:text-white"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-6 py-2 rounded-xl shadow"
+                >
+                  حفظ الباقة
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Staff Modal */}
+      {showStaffModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-md space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-white text-base">
+                {editingStaff ? 'تعديل صلاحيات الموظف' : 'إضافة موظف / مدير جديد'}
+              </h3>
+              <button
+                onClick={() => setShowStaffModal(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveStaff} className="space-y-4">
+              <div>
+                <label className="block font-bold text-slate-300 mb-1">اسم الموظف *:</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="مثال: أحمد سالم"
+                  value={staffName}
+                  onChange={(e) => setStaffName(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-300 mb-1">البريد الإلكتروني *:</label>
+                <input
+                  type="email"
+                  required
+                  disabled={editingStaff?.email === PRIMARY_SUPER_ADMIN_EMAIL}
+                  placeholder="staff@menusmart.app"
+                  value={staffEmail}
+                  onChange={(e) => setStaffEmail(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-300 mb-1">الدور:</label>
+                <select
+                  value={staffRole}
+                  onChange={(e) => setStaffRole(e.target.value as 'super_admin' | 'staff')}
+                  disabled={editingStaff?.email === PRIMARY_SUPER_ADMIN_EMAIL}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                >
+                  <option value="staff">موظف بصلاحيات محددة (Staff)</option>
+                  <option value="super_admin">مدير عام (Super Admin)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-300 mb-2">الصلاحيات الممنوحة:</label>
+                <div className="space-y-2 bg-slate-950 p-3 rounded-xl border border-slate-800">
+                  {[
+                    { key: 'manage_restaurants', label: 'إدارة المطاعم وقبول الطلبات' },
+                    { key: 'manage_subscriptions', label: 'إدارة الاشتراكات والمدفوعات' },
+                    { key: 'manage_pricing', label: 'تعديل الباقات والأسعار' },
+                    { key: 'manage_content', label: 'إدارة محتوى الموقع الرئيسي' },
+                    { key: 'manage_settings', label: 'تعديل إعدادات المنصة' },
+                    { key: 'manage_staff', label: 'إدارة الموظفين والصلاحيات' },
+                    { key: 'view_analytics', label: 'مشاهدة الإحصائيات والتقارير' },
+                  ].map((perm) => {
+                    const isChecked = staffPermissions.includes(perm.key as StaffPermission);
+                    return (
+                      <label key={perm.key} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setStaffPermissions([
+                                ...staffPermissions,
+                                perm.key as StaffPermission,
+                              ]);
+                            } else {
+                              setStaffPermissions(
+                                staffPermissions.filter((p) => p !== perm.key)
+                              );
+                            }
+                          }}
+                          className="w-3.5 h-3.5 rounded text-amber-500"
+                        />
+                        <span className="text-slate-300">{perm.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowStaffModal(false)}
+                  className="px-4 py-2 text-slate-400 hover:text-white"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-5 py-2 rounded-xl shadow"
+                >
+                  حفظ الصلاحيات
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

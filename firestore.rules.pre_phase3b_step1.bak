@@ -1,0 +1,228 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Super Admin must be authenticated with verified email matching the owner
+    function isSuperAdmin() {
+      return request.auth != null &&
+             request.auth.token.email == 'busnesteam8@gmail.com' &&
+             request.auth.token.email_verified == true;
+    }
+
+    // Restaurant Owner check against parent restaurant record (ownerUid is primary)
+    function isRestaurantOwner(restaurantId) {
+      return request.auth != null && (
+        ( 'ownerUid' in get(/databases/$(database)/documents/restaurants/$(restaurantId)).data &&
+          get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.ownerUid == request.auth.uid ) ||
+        ( get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.ownerEmail == request.auth.token.email &&
+          request.auth.token.email_verified == true )
+      );
+    }
+
+    // Global Catch-All: Default Deny All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 1. Subscription Plans
+    match /plans/{planId} {
+      allow read: if true;
+      allow write: if isSuperAdmin() && isValidId(planId);
+    }
+
+    // 2. Platform Settings
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isSuperAdmin() && isValidId(settingId);
+    }
+
+    // 3. Platform Staff
+    match /staff/{staffId} {
+      allow read: if isSuperAdmin();
+      allow write: if isSuperAdmin() && isValidId(staffId);
+    }
+
+    // 4. Activity Logs (Immutable Audit Trail)
+    match /activity_logs/{logId} {
+      allow read: if isSuperAdmin();
+      allow create: if isSuperAdmin() && isValidId(logId);
+      allow update, delete: if false;
+    }
+
+    // 5. Restaurants (Root Tenant Boundary)
+    match /restaurants/{restaurantId} {
+      // Anyone can read if the restaurant allows public menu and is active
+      allow read: if (resource.data.access.allowPublicMenu == true && resource.data.status == 'active') ||
+                     isSuperAdmin() ||
+                     (request.auth != null && (
+                       ('ownerUid' in resource.data && resource.data.ownerUid == request.auth.uid) ||
+                       (resource.data.ownerEmail == request.auth.token.email && request.auth.token.email_verified == true)
+                     ));
+
+      // Super Admin has full create/delete/manage access
+      // Authenticated users with verified email can self-register their pending restaurant
+      allow create: if isValidId(restaurantId) && (
+        isSuperAdmin() ||
+        (
+          request.auth != null &&
+          request.auth.token.email_verified == true &&
+          incoming().ownerUid == request.auth.uid &&
+          incoming().ownerEmail == request.auth.token.email &&
+          incoming().status == 'pending'
+        )
+      );
+
+      allow delete: if isSuperAdmin() && isValidId(restaurantId);
+
+      // Super Admin can update anything
+      // Owner can update general settings but CANNOT change administrative subscription fields, ownership, or access
+      allow update: if isValidId(restaurantId) && (
+        isSuperAdmin() ||
+        (
+          request.auth != null &&
+          (
+            ('ownerUid' in resource.data && resource.data.ownerUid == request.auth.uid) ||
+            (resource.data.ownerEmail == request.auth.token.email && request.auth.token.email_verified == true)
+          ) &&
+          resource.data.status == 'active' &&
+          // Locked identifier & status
+          incoming().id == existing().id &&
+          incoming().status == existing().status &&
+          // Locked ownership: Cannot change ownerEmail, and cannot reassign ownerUid
+          incoming().ownerEmail == existing().ownerEmail &&
+          (!('ownerUid' in existing()) || incoming().ownerUid == existing().ownerUid) &&
+          // Locked access controls: Only Super Admin can change allowDashboard or allowPublicMenu
+          incoming().access.allowDashboard == existing().access.allowDashboard &&
+          incoming().access.allowPublicMenu == existing().access.allowPublicMenu &&
+          // Locked subscription fields: Only Super Admin can change plans, pricing or dates
+          (!('planId' in existing()) || incoming().planId == existing().planId) &&
+          (!('subscription' in existing()) || incoming().subscription == existing().subscription) &&
+          (!('subscriptionStartDate' in existing()) || incoming().subscriptionStartDate == existing().subscriptionStartDate) &&
+          (!('subscriptionEndDate' in existing()) || incoming().subscriptionEndDate == existing().subscriptionEndDate)
+        )
+      );
+
+      // --- Subcollections ---
+
+      // A) Categories
+      match /categories/{categoryId} {
+        allow read: if true;
+        allow create, update: if isValidId(categoryId) &&
+                                 incoming().restaurantId == restaurantId &&
+                                 incoming().name is string &&
+                                 incoming().name.size() > 0 &&
+                                 incoming().name.size() <= 100 &&
+                                 (isSuperAdmin() || isRestaurantOwner(restaurantId));
+        allow delete: if isValidId(categoryId) && (isSuperAdmin() || isRestaurantOwner(restaurantId));
+      }
+
+      // B) Menu Items
+      match /menu_items/{itemId} {
+        allow read: if true;
+        allow create, update: if isValidId(itemId) &&
+                                 incoming().restaurantId == restaurantId &&
+                                 incoming().name is string &&
+                                 incoming().name.size() > 0 &&
+                                 incoming().name.size() <= 120 &&
+                                 incoming().price is number &&
+                                 incoming().price >= 0 &&
+                                 (isSuperAdmin() || isRestaurantOwner(restaurantId));
+        allow delete: if isValidId(itemId) && (isSuperAdmin() || isRestaurantOwner(restaurantId));
+      }
+
+      // C) Tables & QR
+      match /tables/{tableId} {
+        allow read: if true;
+        allow create, update: if isValidId(tableId) &&
+                                 incoming().restaurantId == restaurantId &&
+                                 incoming().tableNumber is string &&
+                                 incoming().tableNumber.size() > 0 &&
+                                 incoming().tableNumber.size() <= 40 &&
+                                 (isSuperAdmin() || isRestaurantOwner(restaurantId));
+        allow delete: if isValidId(tableId) && (isSuperAdmin() || isRestaurantOwner(restaurantId));
+      }
+
+      // D) Orders
+      match /orders/{orderId} {
+        // Public customer can create orders, strictly enforced:
+        // - status MUST be 'pending'
+        // - totalAmount must be valid positive number
+        // - restaurantId must match parent
+        // - customerName is required and size constrained
+        allow create: if isValidId(orderId) &&
+                         incoming().restaurantId == restaurantId &&
+                         incoming().status == 'pending' &&
+                         incoming().totalAmount is number &&
+                         incoming().totalAmount >= 0 &&
+                         incoming().totalAmount <= 50000 &&
+                         incoming().customerName is string &&
+                         incoming().customerName.size() > 0 &&
+                         incoming().customerName.size() <= 80 &&
+                         incoming().orderNumber is string &&
+                         incoming().orderNumber.size() <= 32 &&
+                         incoming().items is list &&
+                         incoming().items.size() > 0 &&
+                         incoming().items.size() <= 100;
+
+        // ONLY Restaurant Owner or Super Admin can view or update order status (e.g. accepted, delivered, cancelled)
+        // Public visitors CANNOT read or update orders directly after creation
+        allow read: if isSuperAdmin() || isRestaurantOwner(restaurantId);
+        allow update: if (isSuperAdmin() || isRestaurantOwner(restaurantId)) &&
+                         incoming().restaurantId == existing().restaurantId &&
+                         incoming().orderNumber == existing().orderNumber &&
+                         incoming().customerName == existing().customerName;
+
+        allow delete: if isSuperAdmin();
+      }
+
+      // E) Reviews
+      match /reviews/{reviewId} {
+        // Public customer can submit review with strict constraints:
+        // - rating must be between 1 and 5
+        // - isApproved MUST be false (CANNOT bypass moderation)
+        // - customerName is size constrained
+        // - comment is size constrained
+        allow create: if isValidId(reviewId) &&
+                         incoming().restaurantId == restaurantId &&
+                         incoming().rating is number &&
+                         incoming().rating >= 1 &&
+                         incoming().rating <= 5 &&
+                         incoming().isApproved == false &&
+                         incoming().customerName is string &&
+                         incoming().customerName.size() > 0 &&
+                         incoming().customerName.size() <= 80 &&
+                         (!('comment' in incoming()) || (incoming().comment is string && incoming().comment.size() <= 600));
+
+        // Public can ONLY read approved reviews; owner and admin can read all (pending and approved)
+        allow read: if resource.data.isApproved == true || isSuperAdmin() || isRestaurantOwner(restaurantId);
+
+        // ONLY Owner or Super Admin can update (approve or reply) or delete reviews
+        allow update: if (isSuperAdmin() || isRestaurantOwner(restaurantId)) &&
+                         incoming().restaurantId == existing().restaurantId &&
+                         incoming().rating == existing().rating &&
+                         incoming().customerName == existing().customerName;
+
+        allow delete: if isSuperAdmin() || isRestaurantOwner(restaurantId);
+      }
+
+      // F) Manual Payments
+      match /payments/{paymentId} {
+        allow read: if isSuperAdmin() || isRestaurantOwner(restaurantId);
+        allow write: if isSuperAdmin() && isValidId(paymentId);
+      }
+    }
+  }
+}

@@ -1,0 +1,344 @@
+export type UserRole = 'super_admin' | 'staff' | 'restaurant_admin' | 'customer';
+
+export type StaffPermission =
+  | 'manage_restaurants'
+  | 'manage_subscriptions'
+  | 'manage_pricing'
+  | 'manage_content'
+  | 'manage_settings'
+  | 'manage_staff'
+  | 'view_analytics';
+
+export interface PlatformStaff {
+  id: string;
+  name: string;
+  email: string;
+  role: 'super_admin' | 'staff';
+  permissions: StaffPermission[];
+  isActive: boolean;
+  createdAt: string;
+  lastLogin?: string;
+}
+
+export type RestaurantStatus = 'active' | 'pending' | 'suspended' | 'blocked';
+
+export interface RestaurantSubscription {
+  planId: string;
+  billingCycle: 'monthly' | 'annual';
+  status: 'active' | 'expired' | 'trial';
+  startDate: string;
+  renewalDate: string;
+  renewalTimestamp?: any; // Firestore native Timestamp ({ seconds: number, nanoseconds: number }) for server-side rule verification
+  price: number;
+  autoRenew?: boolean;
+}
+
+export interface ManualPaymentRecord {
+  id: string;
+  restaurantId: string;
+  planId: string;
+  amount: number;
+  currency: string;
+  billingCycle: 'monthly' | 'annual';
+  paymentMethod: 'cash' | 'bank_transfer' | 'pos' | 'cheque' | 'manual_admin';
+  referenceNumber?: string;
+  notes?: string;
+  date: string;
+  recordedBy: string;
+  isManualRecorded: true; // To explicitly distinguish from automated online payment gateways
+}
+
+export interface SubscriptionHistoryItem {
+  id: string;
+  restaurantId: string;
+  action: 'registered' | 'activated' | 'plan_changed' | 'renewed' | 'extended' | 'suspended' | 'payment_added';
+  planId: string;
+  details: string;
+  date: string;
+  actor: string;
+}
+
+export interface MenuAppearance {
+  primaryColor: string; // e.g. '#f59e0b'
+  secondaryColor: string; // e.g. '#0f172a'
+  fontFamily: 'Cairo' | 'Tajawal' | 'Almarai' | 'Readex Pro';
+  cardLayout: 'cards' | 'list' | 'compact';
+  showCalories: boolean;
+  showBadges: boolean;
+  showAllergens: boolean;
+  buttonShape: 'rounded' | 'pill' | 'square';
+  backgroundColor: string; // e.g. '#020617'
+  headerStyle: 'banner' | 'clean' | 'minimal';
+}
+
+export interface RestaurantAccessControl {
+  allowDashboard: boolean; // Control whether restaurant owner can access restaurant admin panel
+  allowPublicMenu: boolean; // Control whether public visitors can access public menu
+}
+
+export interface RestaurantSettings {
+  enableOrdering: boolean;
+  enableTableOrdering: boolean;
+  enableReviews: boolean;
+  autoApproveReviews: boolean;
+  taxPercentage: number;
+  deliveryFee: number;
+  minimumOrder: number;
+  workingHours: string;
+  address: string;
+  city: string;
+  googleMapsUrl?: string;
+  instagram?: string;
+  tiktok?: string;
+  facebook?: string;
+  website?: string;
+  themeColor: string;
+  wifiName?: string;
+  wifiPassword?: string;
+}
+
+export interface RestaurantTable {
+  id: string;
+  restaurantId: string;
+  tableNumber: string;
+  nameAr?: string;
+  capacity?: number;
+  location?: 'indoor' | 'outdoor' | 'vip' | 'terrace';
+  isActive: boolean;
+}
+
+export interface Restaurant {
+  id: string;
+  slug: string;
+  nameAr: string;
+  nameEn: string;
+  description: string;
+  cuisineType: string;
+  city: string;
+  logoUrl: string;
+  coverUrl: string;
+  phone: string;
+  whatsappNumber: string;
+  currency: string;
+  status: RestaurantStatus;
+  access: RestaurantAccessControl;
+  subscription: RestaurantSubscription;
+  settings: RestaurantSettings;
+  appearance: MenuAppearance;
+  customFeatures?: Record<string, boolean>; // Granular feature overrides for this specific restaurant
+  createdAt: string;
+  ownerEmail: string;
+  ownerUid?: string;
+  ownerName?: string;
+  viewsCount: number;
+  ordersCount: number;
+}
+
+export interface Category {
+  id: string;
+  restaurantId: string;
+  nameAr: string;
+  nameEn: string;
+  icon: string;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface ItemSize {
+  name: string;
+  price: number;
+}
+
+export interface ItemOption {
+  name: string;
+  required: boolean;
+  items: {
+    name: string;
+    additionalPrice: number;
+  }[];
+}
+
+export interface MenuItem {
+  id: string;
+  restaurantId: string;
+  categoryId: string;
+  nameAr: string;
+  nameEn: string;
+  descriptionAr: string;
+  price: number;
+  discountPrice?: number;
+  imageUrl: string;
+  isAvailable: boolean;
+  isFeatured: boolean;
+  calories?: number;
+  prepTime?: string;
+  allergens?: string[];
+  sizes?: ItemSize[];
+  options?: ItemOption[];
+  sortOrder?: number;
+  notes?: string;
+}
+
+export type OrderType = 'dine_in' | 'takeaway' | 'delivery';
+
+export interface CartItem {
+  cartItemId: string;
+  menuItemId: string;
+  nameAr: string;
+  nameEn: string;
+  unitPrice: number;
+  quantity: number;
+  selectedSize?: ItemSize;
+  selectedOptions?: { groupName: string; optionName: string; additionalPrice: number }[];
+  notes?: string;
+  imageUrl: string;
+}
+
+export interface Order {
+  id: string;
+  restaurantId: string;
+  orderNumber: string;
+  orderType: OrderType;
+  tableNumber?: string;
+  customerName: string;
+  customerPhone: string;
+  address?: string;
+  notes?: string;
+  items: CartItem[];
+  subtotal: number;
+  tax: number;
+  deliveryFee: number;
+  total: number;
+  totalAmount?: number;
+  status: 'pending' | 'new' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'completed' | 'cancelled';
+  createdAt: string;
+}
+
+export type OrderStatus = 'pending' | 'new' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'completed' | 'cancelled';
+
+export interface Review {
+  id: string;
+  restaurantId: string;
+  customerName: string;
+  rating: number; // 1 to 5
+  comment: string;
+  isApproved: boolean;
+  reply?: string;
+  createdAt: string;
+}
+
+export interface SubscriptionPlan {
+  id: string;
+  nameAr: string;
+  nameEn: string;
+  descriptionAr: string;
+  monthlyPrice: number;
+  annualPrice: number;
+  annualDiscountPercent: number; // e.g. 20%
+  currency: string;
+  features: string[];
+  popular: boolean;
+  badge?: string;
+  itemLimit: number;
+  categoryLimit: number;
+  tableLimit: number;
+  branchLimit: number;
+  userLimit: number;
+  isActive: boolean;
+  sortOrder: number;
+  isDefault: boolean;
+  featureFlags: {
+    qrStudio: boolean;
+    tableOrdering: boolean;
+    whatsappDirect: boolean;
+    reviewsSystem: boolean;
+    analytics: boolean;
+    customDomain: boolean;
+    appearanceCustomization: boolean;
+    multiLanguage: boolean;
+    exportReports: boolean;
+  };
+}
+
+export interface ActivityLog {
+  id: string;
+  timestamp: string;
+  actorEmail: string;
+  actorName: string;
+  category: 'restaurants' | 'subscriptions' | 'pricing' | 'content' | 'settings' | 'staff' | 'security';
+  action: string;
+  details: string;
+  targetId?: string;
+}
+
+export interface WebsiteContent {
+  platformName: string;
+  platformSlogan: string;
+  platformDescription: string;
+  logoUrl: string;
+  supportPhone: string;
+  supportWhatsApp: string;
+  supportEmail: string;
+  currency: string;
+  socialLinks: {
+    twitter?: string;
+    instagram?: string;
+    linkedin?: string;
+    facebook?: string;
+    youtube?: string;
+  };
+  hero: {
+    badge: string;
+    title: string;
+    highlight: string;
+    subtitle: string;
+    primaryCtaText: string;
+    secondaryCtaText: string;
+  };
+  sectionsVisibility: {
+    hero: boolean;
+    interactivePreview: boolean;
+    stats: boolean;
+    features: boolean;
+    howItWorks: boolean;
+    pricing: boolean;
+    faq: boolean;
+    cta: boolean;
+  };
+  features: {
+    id: string;
+    title: string;
+    description: string;
+    icon: string;
+  }[];
+  howItWorks: {
+    step: number;
+    title: string;
+    description: string;
+  }[];
+  faqs: {
+    id: string;
+    question: string;
+    answer: string;
+  }[];
+  seo: {
+    metaTitle: string;
+    metaDescription: string;
+    keywords: string;
+  };
+}
+
+export interface PlatformSettings {
+  registrationEnabled: boolean;
+  registrationDisabledMessage: string;
+  freeTrialDays: number;
+  defaultCurrency: string;
+  defaultTaxPercentage: number;
+  globalAnnouncement: string;
+  showGlobalAnnouncement: boolean;
+  whatsappTemplate: string;
+  applyPriceChangesTo: 'new_only' | 'all';
+  defaultPlanId: string;
+  ordersEnabledGlobally: boolean;
+  reviewsEnabledGlobally: boolean;
+}

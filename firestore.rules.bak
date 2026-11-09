@@ -1,0 +1,104 @@
+// Backup of initial firestore.rules before Phase 1 hardening
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSuperAdmin() {
+      return request.auth != null && request.auth.token.email == 'busnesteam8@gmail.com';
+    }
+
+    function isRestaurantOwner(restaurantId) {
+      return request.auth != null && (
+        get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.ownerEmail == request.auth.token.email ||
+        get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.ownerUid == request.auth.uid
+      );
+    }
+
+    // Default deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Subscription Plans - Publicly readable, writeable only by Super Admin
+    match /plans/{planId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    // Platform Settings & Website Content
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    // Platform Staff
+    match /staff/{staffId} {
+      allow read: if isSuperAdmin();
+      allow write: if isSuperAdmin();
+    }
+
+    // Activity Logs
+    match /activity_logs/{logId} {
+      allow read: if isSuperAdmin();
+      allow create: if isSuperAdmin();
+      allow update, delete: if false;
+    }
+
+    // Restaurants
+    match /restaurants/{restaurantId} {
+      // Anyone can read if the restaurant allows public menu and is active
+      allow read: if resource.data.allowPublicMenu == true ||
+                     isSuperAdmin() ||
+                     (request.auth != null && (request.auth.token.email == resource.data.ownerEmail || request.auth.uid == resource.data.ownerUid));
+      
+      // Super Admin has full write access
+      allow create, update, delete: if isSuperAdmin();
+
+      // Owner can update certain fields (appearance, wifi, phone, name) if not suspended
+      allow update: if (request.auth != null && (request.auth.token.email == resource.data.ownerEmail || request.auth.uid == resource.data.ownerUid)) &&
+                       resource.data.status == 'active' &&
+                       // Prevent owner from changing their own plan, status, or subscription dates
+                       request.resource.data.status == resource.data.status &&
+                       request.resource.data.planId == resource.data.planId &&
+                       request.resource.data.allowDashboardAccess == resource.data.allowDashboardAccess;
+
+      // Subcollections
+      match /categories/{categoryId} {
+        allow read: if true;
+        allow write: if isSuperAdmin() || isRestaurantOwner(restaurantId);
+      }
+
+      match /menu_items/{itemId} {
+        allow read: if true;
+        allow write: if isSuperAdmin() || isRestaurantOwner(restaurantId);
+      }
+
+      match /tables/{tableId} {
+        allow read: if true;
+        allow write: if isSuperAdmin() || isRestaurantOwner(restaurantId);
+      }
+
+      match /orders/{orderId} {
+        // Public customer can create orders
+        allow create: if request.resource.data.totalAmount >= 0;
+        // Restaurant owner or super admin can read/update orders
+        allow read, update: if isSuperAdmin() || isRestaurantOwner(restaurantId);
+        allow delete: if isSuperAdmin();
+      }
+
+      match /reviews/{reviewId} {
+        // Public customer can submit review
+        allow create: if request.resource.data.rating >= 1 && request.resource.data.rating <= 5;
+        // Public can read approved reviews
+        allow read: if resource.data.isApproved == true || isSuperAdmin() || isRestaurantOwner(restaurantId);
+        // Owner or super admin can approve/delete reviews
+        allow update, delete: if isSuperAdmin() || isRestaurantOwner(restaurantId);
+      }
+
+      match /payments/{paymentId} {
+        allow read: if isSuperAdmin() || isRestaurantOwner(restaurantId);
+        allow write: if isSuperAdmin();
+      }
+    }
+  }
+}
